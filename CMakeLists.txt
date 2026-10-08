@@ -127,6 +127,7 @@ set(wfa2lib_SOURCE
   wavefront/wavefront_termination.c
   wavefront/wavefront_extend_kernels_avx.c
   wavefront/wavefront_extend_kernels.c
+  system/mm_virtual_arena.c
   system/mm_stack.c
   system/mm_allocator.c
   system/profiler_counter.c
@@ -207,6 +208,7 @@ add_executable(align_benchmark
   tools/align_benchmark/benchmark/benchmark_gap_linear.c
   tools/align_benchmark/benchmark/benchmark_indel.c
   tools/align_benchmark/benchmark/benchmark_utils.c
+  system/mm_virtual_arena.c
   system/mm_allocator.c
   system/mm_stack.c
   system/profiler_counter.c

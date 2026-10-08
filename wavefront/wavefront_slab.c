@@ -36,8 +36,7 @@
 /*
  * Constants
  */
-#define WF_SLAB_EXPAND_FACTOR          1.5f
-#define WF_SLAB_QUEUES_LENGTH_INIT     100
+#define WF_SLAB_ARENA_CHUNK_SIZE (256ULL * 1024 * 1024)
 
 /*
  * Setup
@@ -56,117 +55,36 @@ wavefront_slab_t* wavefront_slab_new(
   // Wavefront Slabs
   wavefront_slab->init_wf_length = init_wf_length;
   wavefront_slab->current_wf_length = init_wf_length;
-  wavefront_slab->wavefronts = vector_new(WF_SLAB_QUEUES_LENGTH_INIT,wavefront_t*);
-  wavefront_slab->wavefronts_free = vector_new(WF_SLAB_QUEUES_LENGTH_INIT,wavefront_t*);
+  wavefront_slab->wavefronts = NULL;
+  wavefront_slab->wavefronts_free = NULL;
   // Stats
   wavefront_slab->memory_used = 0;
   // MM
   wavefront_slab->mm_allocator = mm_allocator;
+  wavefront_slab->arena = mm_virtual_arena_new(WF_SLAB_ARENA_CHUNK_SIZE);
   // Return
   return wavefront_slab;
 }
 void wavefront_slab_reap_free(
     wavefront_slab_t* const wavefront_slab) {
-  // Parameters
-  wavefront_t** const wavefronts = vector_get_mem(wavefront_slab->wavefronts,wavefront_t*);
-  const int num_wavefronts = vector_get_used(wavefront_slab->wavefronts);
-  mm_allocator_t* const mm_allocator = wavefront_slab->mm_allocator;
-  // Remove "deallocated" and free wavefronts
-  int i, valid_idx = 0;
-  for (i=0;i<num_wavefronts;++i) {
-    switch (wavefronts[i]->status) {
-      case wavefront_status_deallocated:
-        mm_allocator_free(mm_allocator,wavefronts[i]); // Delete handler
-        break;
-      case wavefront_status_busy:
-        wavefronts[valid_idx++] = wavefronts[i]; // Valid wavefront
-        break;
-      case wavefront_status_free:
-        wavefront_free(wavefronts[i],mm_allocator); // Free wavefront
-        wavefront_slab->memory_used -= wavefront_get_size(wavefronts[i]);
-        mm_allocator_free(mm_allocator,wavefronts[i]); // Delete handler
-        break;
-    }
-  }
-  vector_set_used(wavefront_slab->wavefronts,valid_idx);
-  vector_clear(wavefront_slab->wavefronts_free);
+  mm_virtual_arena_clear(wavefront_slab->arena);
 }
 void wavefront_slab_reap_repurpose(
     wavefront_slab_t* const wavefront_slab) {
-  // Parameters
-  const int current_wf_length = wavefront_slab->current_wf_length;
-  wavefront_t** const wavefronts = vector_get_mem(wavefront_slab->wavefronts,wavefront_t*);
-  const int num_wavefronts = vector_get_used(wavefront_slab->wavefronts);
-  mm_allocator_t* const mm_allocator = wavefront_slab->mm_allocator;
-  // Clear free
-  vector_reserve(wavefront_slab->wavefronts_free,num_wavefronts,false);
-  wavefront_t** const wavefronts_free = vector_get_mem(wavefront_slab->wavefronts_free,wavefront_t*);
-  // Remove "deallocated" and repurpose all we can of current wf-length
-  int i, valid_idx = 0;
-  for (i=0;i<num_wavefronts;++i) {
-    switch (wavefronts[i]->status) {
-      case wavefront_status_deallocated:
-        mm_allocator_free(mm_allocator,wavefronts[i]); // Delete handler
-        break;
-      case wavefront_status_busy:
-      case wavefront_status_free:
-        if (wavefronts[i]->wf_elements_allocated == current_wf_length) {
-          wavefronts[i]->status = wavefront_status_free; // Set free
-          wavefronts[valid_idx] = wavefronts[i]; // Valid wavefront
-          wavefronts_free[valid_idx] = wavefronts[i]; // Free wavefront
-          valid_idx++;
-        } else {
-          wavefront_free(wavefronts[i],mm_allocator); // Free wavefront
-          wavefront_slab->memory_used -= wavefront_get_size(wavefronts[i]);
-          mm_allocator_free(mm_allocator,wavefronts[i]); // Delete handler
-        }
-        break;
-    }
-  }
-  vector_set_used(wavefront_slab->wavefronts,valid_idx);
-  vector_set_used(wavefront_slab->wavefronts_free,valid_idx);
+  mm_virtual_arena_clear(wavefront_slab->arena);
 }
 void wavefront_slab_reap(
     wavefront_slab_t* const wavefront_slab) {
-  // Back to initial size
   wavefront_slab->current_wf_length = wavefront_slab->init_wf_length;
-  wavefront_slab_reap_repurpose(wavefront_slab); // Repurpose all wavefronts
+  mm_virtual_arena_clear(wavefront_slab->arena);
 }
 void wavefront_slab_clear(
     wavefront_slab_t* const wavefront_slab) {
-  // Select slab mode
-  switch (wavefront_slab->slab_mode) {
-    case wf_slab_reuse:
-      wavefront_slab_reap_repurpose(wavefront_slab);
-      break;
-    case wf_slab_tight:
-      // Back to initial size
-      wavefront_slab->current_wf_length = wavefront_slab->init_wf_length;
-      wavefront_slab_reap_repurpose(wavefront_slab);
-      break;
-  }
+  mm_virtual_arena_clear(wavefront_slab->arena);
 }
 void wavefront_slab_delete(
     wavefront_slab_t* const wavefront_slab) {
-  // Parameters
-  mm_allocator_t* const mm_allocator = wavefront_slab->mm_allocator;
-  // Delete free vector
-  vector_delete(wavefront_slab->wavefronts_free);
-  // Free wavefronts
-  wavefront_t** const wavefronts =
-      vector_get_mem(wavefront_slab->wavefronts,wavefront_t*);
-  const int num_wavefronts = vector_get_used(wavefront_slab->wavefronts);
-  int i;
-  for (i=0;i<num_wavefronts;++i) {
-    if (wavefronts[i]->status == wavefront_status_deallocated) {
-      mm_allocator_free(mm_allocator,wavefronts[i]); // Delete handler
-    } else {
-      wavefront_free(wavefronts[i],mm_allocator); // Free wavefront
-      mm_allocator_free(mm_allocator,wavefronts[i]); // Delete handler
-    }
-  }
-  vector_delete(wavefront_slab->wavefronts);
-  // Handler
+  mm_virtual_arena_delete(wavefront_slab->arena);
   mm_allocator_free(wavefront_slab->mm_allocator,wavefront_slab);
 }
 /*
@@ -175,116 +93,54 @@ void wavefront_slab_delete(
 void wavefront_slab_set_mode(
     wavefront_slab_t* const wavefront_slab,
     const wf_slab_mode_t slab_mode) {
-  // Check mode
-  if (slab_mode != wavefront_slab->slab_mode) {
-    // Change mode
-    wavefront_slab->slab_mode = slab_mode;
-    // Reap
-    wavefront_slab->current_wf_length = wavefront_slab->init_wf_length;
-    wavefront_slab_reap_repurpose(wavefront_slab);
-  }
+  wavefront_slab->slab_mode = slab_mode;
 }
 /*
  * Slab Allocator
  */
-wavefront_t* wavefront_slab_allocate_new(
-    wavefront_slab_t* const wavefront_slab,
-    const int wf_length_requested,
-    const int min_lo,
-    const int max_hi) {
-  // Allocate a new wavefront
-  mm_allocator_t* const mm_allocator = wavefront_slab->mm_allocator;
-  wavefront_t* const wavefront = mm_allocator_alloc(mm_allocator,wavefront_t);
-  wavefront_allocate(wavefront,wf_length_requested,wavefront_slab->allocate_backtrace,mm_allocator);
-  vector_insert(wavefront_slab->wavefronts,wavefront,wavefront_t*);
-  wavefront_slab->memory_used += wavefront_get_size(wavefront);
-  // Init wavefront
-  wavefront->status = wavefront_status_busy;
-  wavefront_init(wavefront,min_lo,max_hi);
-  // Return
-  return wavefront;
-}
-wavefront_t* wavefront_slab_allocate_free(
-    wavefront_slab_t* const wavefront_slab,
-    const int min_lo,
-    const int max_hi) {
-  // Parameters
-  vector_t* const wavefronts_free = wavefront_slab->wavefronts_free;
-  // Reuse wavefront
-  wavefront_t* const wavefront = *(vector_get_last_elm(wavefronts_free,wavefront_t*));
-  vector_dec_used(wavefronts_free);
-  // Init wavefront
-  wavefront->status = wavefront_status_busy;
-  wavefront_init(wavefront,min_lo,max_hi);
-  // Return
-  return wavefront;
-}
 wavefront_t* wavefront_slab_allocate(
     wavefront_slab_t* const wavefront_slab,
     const int min_lo,
     const int max_hi) {
-  // Parameters
-  vector_t* const wavefronts_free = wavefront_slab->wavefronts_free;
-  const int wf_length = WAVEFRONT_LENGTH(min_lo,max_hi);
-  // Check slab-mode
-  if (wavefront_slab->slab_mode == wf_slab_reuse) {
-    // Check max-length of pre-allocated wavefronts
-    if (wf_length > wavefront_slab->current_wf_length) {
-      const int proposed_wf_length = (float)wf_length * WF_SLAB_EXPAND_FACTOR;
-      wavefront_slab->current_wf_length = proposed_wf_length; // New slab size
-      wavefront_slab_reap_free(wavefront_slab); // Reap free wavefronts
-    }
-    // Check for a free wavefront (pre-allocated in the slab)
-    if (vector_get_used(wavefronts_free) > 0) {
-      return wavefront_slab_allocate_free(wavefront_slab,min_lo,max_hi);
-    } else {
-      // Allocate a new wavefront
-      return wavefront_slab_allocate_new(wavefront_slab,
-          wavefront_slab->current_wf_length,min_lo,max_hi);
-    }
-  } else { // wf_slab_tight
-    if (wf_length <= wavefront_slab->init_wf_length) {
-      // Check for a free wavefront (pre-allocated in the slab)
-      if (vector_get_used(wavefronts_free) > 0) {
-        return wavefront_slab_allocate_free(wavefront_slab,min_lo,max_hi);
-      } else {
-        return wavefront_slab_allocate_new(wavefront_slab,
-            wavefront_slab->init_wf_length,min_lo,max_hi); // Allocate new
-      }
-    } else {
-      return wavefront_slab_allocate_new(wavefront_slab,
-          wf_length,min_lo,max_hi); // Allocate new
-    }
+  const int wf_elements_allocated = WAVEFRONT_LENGTH(min_lo,max_hi);
+  mm_virtual_arena_t* const arena = wavefront_slab->arena;
+
+  // Allocate wavefront handler
+  wavefront_t* const wavefront = (wavefront_t*) mm_virtual_arena_allocate(
+      arena,sizeof(wavefront_t),8);
+
+  // Allocate diagonal offsets (64-byte aligned for AVX2)
+  wavefront->wf_elements_allocated = wf_elements_allocated;
+  wavefront->offsets_mem = (wf_offset_t*) mm_virtual_arena_allocate(
+      arena,(size_t)wf_elements_allocated*sizeof(wf_offset_t),64);
+
+  // Allocate backtrace memory
+  if (wavefront_slab->allocate_backtrace) {
+    wavefront->bt_pcigar_mem = (pcigar_t*) mm_virtual_arena_allocate(
+        arena,(size_t)wf_elements_allocated*sizeof(pcigar_t),64);
+    wavefront->bt_prev_mem = (bt_block_idx_t*) mm_virtual_arena_allocate(
+        arena,(size_t)wf_elements_allocated*sizeof(bt_block_idx_t),64);
+  } else {
+    wavefront->bt_pcigar_mem = NULL;
+    wavefront->bt_prev_mem = NULL;
   }
+
+  // Init wavefront
+  wavefront->status = wavefront_status_busy;
+  wavefront_init(wavefront,min_lo,max_hi);
+  // Return
+  return wavefront;
 }
 void wavefront_slab_free(
     wavefront_slab_t* const wavefront_slab,
     wavefront_t* const wavefront) {
-  // Check reasons to repurpose wavefront (NOTE: Tight-mode never slab_frees())
-  //   (A) Reuse-mode and wavefront has current wf-length
-  //   (B) Tight-mode and wavefront has init wf-length
-  const int wf_length = wavefront->wf_elements_allocated;
-  const bool repurpose_reuse =
-      (wavefront_slab->slab_mode == wf_slab_reuse) &&
-      (wf_length == wavefront_slab->current_wf_length);
-  const bool repurpose_tight =
-      (wavefront_slab->slab_mode == wf_slab_tight) &&
-      (wf_length == wavefront_slab->init_wf_length);
-  if (repurpose_reuse || repurpose_tight) {
-    // Return wavefront to slab as free (Good job recycling)
-    wavefront->status = wavefront_status_free;
-    vector_insert(wavefront_slab->wavefronts_free,wavefront,wavefront_t*);
-  } else {
-    // Delete wavefront
-    wavefront->status = wavefront_status_deallocated;
-    wavefront_slab->memory_used -= wavefront_get_size(wavefront);
-    wavefront_free(wavefront,wavefront_slab->mm_allocator);
-  }
+  (void)wavefront_slab;
+  wavefront->status = wavefront_status_free;
 }
 /*
  * Utils
  */
 uint64_t wavefront_slab_get_size(
     wavefront_slab_t* const wavefront_slab) {
-  return wavefront_slab->memory_used;
+  return mm_virtual_arena_get_used(wavefront_slab->arena);
 }
