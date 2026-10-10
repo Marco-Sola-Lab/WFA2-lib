@@ -34,6 +34,7 @@
 
 #include "utils/vector.h"
 #include "system/mm_allocator.h"
+#include "system/mm_virtual_arena.h"
 #include "wavefront.h"
 
 /*
@@ -56,6 +57,7 @@ typedef struct {
   uint64_t memory_used;            // Memory used (Bytes)
   // MM
   mm_allocator_t* mm_allocator;    // MM-Allocator
+  mm_virtual_arena_t* arena;       // Virtual Memory Arena
 } wavefront_slab_t;
 
 /*
@@ -66,6 +68,10 @@ wavefront_slab_t* wavefront_slab_new(
     const bool allocate_backtrace,
     const wf_slab_mode_t slab_mode,
     mm_allocator_t* const mm_allocator);
+void wavefront_slab_reap_free(
+    wavefront_slab_t* const wavefront_slab);
+void wavefront_slab_reap_repurpose(
+    wavefront_slab_t* const wavefront_slab);
 void wavefront_slab_reap(
     wavefront_slab_t* const wavefront_slab);
 void wavefront_slab_clear(
