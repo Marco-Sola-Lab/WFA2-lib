@@ -164,7 +164,11 @@ void wf_heuristic_equate(
   if (wavefront_dst != NULL) {
     if (wavefront_src->lo > wavefront_dst->lo) wavefront_dst->lo = wavefront_src->lo;
     if (wavefront_src->hi < wavefront_dst->hi) wavefront_dst->hi = wavefront_src->hi;
-    if (wavefront_dst->lo > wavefront_dst->hi) wavefront_dst->null = true;
+    if (wavefront_dst->lo > wavefront_dst->hi) {
+      wavefront_dst->null = true;
+      wavefront_dst->wf_elements_init_min = wavefront_dst->lo;
+      wavefront_dst->wf_elements_init_max = wavefront_dst->hi;
+    }
   }
 }
 /*
@@ -539,7 +543,11 @@ bool wavefront_heuristic_cufoff(
   }
   // Check wavefront length
   if (lo_base == mwavefront->lo && hi_base == mwavefront->hi) return false; // No wavefronts pruned
-  if (mwavefront->lo > mwavefront->hi) mwavefront->null = true;
+  if (mwavefront->lo > mwavefront->hi) {
+    mwavefront->null = true;
+    mwavefront->wf_elements_init_min = mwavefront->lo;
+    mwavefront->wf_elements_init_max = mwavefront->hi;
+  }
   // DEBUG
   // const int wf_length_base = hi_base-lo_base+1;
   // const int wf_length_reduced = mwavefront->hi-mwavefront->lo+1;

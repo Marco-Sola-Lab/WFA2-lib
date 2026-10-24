@@ -61,6 +61,7 @@ do
     # Heuristics
     \time -v $BIN -i $INPUT -o $OUTPUT/$NAME.affine.wfapt0.alg -a gap-affine-wfa $MODE --wfa-heuristic=wfa-adaptive --wfa-heuristic-parameters=10,50,1 >> $LOG 2>&1
     \time -v $BIN -i $INPUT -o $OUTPUT/$NAME.affine.wfapt1.alg -a gap-affine-wfa $MODE --wfa-heuristic=wfa-adaptive --wfa-heuristic-parameters=10,50,10 >> $LOG 2>&1
+    \time -v $BIN -i $INPUT -o $OUTPUT/$NAME.affine.xdrop.alg -a gap-affine-wfa $MODE --affine-penalties="-2,3,1,4" --wfa-heuristic=xdrop --wfa-heuristic-parameters=20,2 >> $LOG 2>&1
 done
 
 # Intra-tests
