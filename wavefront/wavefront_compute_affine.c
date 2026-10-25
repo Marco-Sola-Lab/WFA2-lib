@@ -66,12 +66,16 @@ void wavefront_compute_affine_idm(
     // Update I1
     const wf_offset_t ins1_o = m_open1[k-1];
     const wf_offset_t ins1_e = i1_ext[k-1];
-    const wf_offset_t ins1 = MAX(ins1_o,ins1_e) + 1;
+    // Allow direct transition from deletion to insertion
+    const wf_offset_t ins1_from_del = d1_ext[k-1] + 1;
+    const wf_offset_t ins1 = MAX(ins1_o, MAX(ins1_e, ins1_from_del)) + 1;
     out_i1[k] = ins1;
     // Update D1
     const wf_offset_t del1_o = m_open1[k+1];
     const wf_offset_t del1_e = d1_ext[k+1];
-    const wf_offset_t del1 = MAX(del1_o,del1_e);
+    // Allow direct transition from insertion to deletion
+    const wf_offset_t del1_from_ins = i1_ext[k+1];
+    const wf_offset_t del1 = MAX(del1_o, MAX(del1_e, del1_from_ins));
     out_d1[k] = del1;
     // Update M
     const wf_offset_t misms = m_misms[k] + 1;
@@ -130,36 +134,57 @@ void wavefront_compute_affine_idm_piggyback(
     // Update I1
     const wf_offset_t ins1_o = m_open1[k-1];
     const wf_offset_t ins1_e = i1_ext[k-1];
+    // Add direct transition from deletion to insertion
+    const wf_offset_t ins1_from_del = d1_ext[k-1] + 1;
+    
     wf_offset_t ins1;
     pcigar_t ins1_pcigar;
     bt_block_idx_t ins1_block_idx;
-    if (ins1_e >= ins1_o) {
+    
+    // Find best source for insertion (including from deletion)
+    if (ins1_e >= ins1_o && ins1_e >= ins1_from_del) {
       ins1 = ins1_e;
       ins1_pcigar = i1_ext_bt_pcigar[k-1];
       ins1_block_idx = i1_ext_bt_prev[k-1];
-    } else {
+    } else if (ins1_o >= ins1_from_del) {
       ins1 = ins1_o;
       ins1_pcigar = m_open1_bt_pcigar[k-1];
       ins1_block_idx = m_open1_bt_prev[k-1];
+    } else {
+      ins1 = ins1_from_del;
+      ins1_pcigar = d1_ext_bt_pcigar[k-1];
+      ins1_block_idx = d1_ext_bt_prev[k-1];
     }
+    
     out_i1_bt_pcigar[k] = PCIGAR_PUSH_BACK_INS(ins1_pcigar);
     out_i1_bt_prev[k] = ins1_block_idx;
     out_i1[k] = ++ins1;
+    
     // Update D1
     const wf_offset_t del1_o = m_open1[k+1];
     const wf_offset_t del1_e = d1_ext[k+1];
+    // Add direct transition from insertion to deletion
+    const wf_offset_t del1_from_ins = i1_ext[k+1];
+    
     wf_offset_t del1;
     pcigar_t del1_pcigar;
     bt_block_idx_t del1_block_idx;
-    if (del1_e >= del1_o) {
+    
+    // Find best source for deletion (including from insertion)
+    if (del1_e >= del1_o && del1_e >= del1_from_ins) {
       del1 = del1_e;
       del1_pcigar = d1_ext_bt_pcigar[k+1];
       del1_block_idx = d1_ext_bt_prev[k+1];
-    } else {
+    } else if (del1_o >= del1_from_ins) {
       del1 = del1_o;
       del1_pcigar = m_open1_bt_pcigar[k+1];
       del1_block_idx = m_open1_bt_prev[k+1];
+    } else {
+      del1 = del1_from_ins;
+      del1_pcigar = i1_ext_bt_pcigar[k+1];
+      del1_block_idx = i1_ext_bt_prev[k+1];
     }
+    
     out_d1_bt_pcigar[k] = PCIGAR_PUSH_BACK_DEL(del1_pcigar);
     out_d1_bt_prev[k] = del1_block_idx;
     out_d1[k] = del1;
