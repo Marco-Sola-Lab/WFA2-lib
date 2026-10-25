@@ -9,6 +9,7 @@ FOLDER_BUILD=../build
 ###############################################################################
 MODULES=mm_allocator \
         mm_stack \
+        mm_virtual_arena \
         profiler_counter \
         profiler_timer
 

@@ -34,6 +34,7 @@
 
 #include "utils/vector.h"
 #include "system/mm_allocator.h"
+#include "system/mm_virtual_arena.h"
 #include "wavefront.h"
 
 /*
@@ -58,6 +59,9 @@ typedef struct {
   uint64_t memory_used;            // Memory used (Bytes)
   // MM
   mm_allocator_t* mm_allocator;    // MM-Allocator
+  // Virtual Arena & Fallback
+  bool use_virtual_arena;          // True if virtual arena is active
+  mm_virtual_arena_t* arena;       // Virtual Memory Arena
 } wavefront_slab_t;
 
 /*

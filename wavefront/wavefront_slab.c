@@ -38,6 +38,8 @@
  */
 #define WF_SLAB_EXPAND_FACTOR          1.5f
 #define WF_SLAB_QUEUES_LENGTH_INIT     100
+#define WF_SLAB_ARENA_CHUNK_SIZE       (256ULL * 1024 * 1024)
+#define WF_SLAB_SIMD_PADDING           32
 
 /*
  * Setup
@@ -64,11 +66,31 @@ wavefront_slab_t* wavefront_slab_new(
   wavefront_slab->memory_used = 0;
   // MM
   wavefront_slab->mm_allocator = mm_allocator;
-  // Return
+
+  // Allocate Virtual Memory Arena for tight mode (wavefront_memory_high) on POSIX/Linux 64-bit
+#if defined(__linux__) && (defined(__x86_64__) || defined(__aarch64__))
+#ifndef WFA_NO_VIRTUAL_ARENA
+  if (slab_mode == wf_slab_tight && getenv("WFA_FORCE_SLAB") == NULL) {
+    wavefront_slab->arena = mm_virtual_arena_new(WF_SLAB_ARENA_CHUNK_SIZE);
+    if (wavefront_slab->arena != NULL) {
+      wavefront_slab->use_virtual_arena = true;
+      wavefront_slab->dirty = false;
+      return wavefront_slab;
+    }
+  }
+#endif
+#endif
+
+  // Fallback to classic slab allocator
+  wavefront_slab->use_virtual_arena = false;
+  wavefront_slab->arena = NULL;
   return wavefront_slab;
 }
 void wavefront_slab_reap_free(
     wavefront_slab_t* const wavefront_slab) {
+  if (wavefront_slab->use_virtual_arena) {
+    return;
+  }
   // Parameters
   wavefront_t** const wavefronts = vector_get_mem(wavefront_slab->wavefronts,wavefront_t*);
   const int num_wavefronts = vector_get_used(wavefront_slab->wavefronts);
@@ -96,6 +118,9 @@ void wavefront_slab_reap_free(
 }
 void wavefront_slab_reap_repurpose(
     wavefront_slab_t* const wavefront_slab) {
+  if (wavefront_slab->use_virtual_arena) {
+    return;
+  }
   // Parameters
   const int current_wf_length = wavefront_slab->current_wf_length;
   wavefront_t** const wavefronts = vector_get_mem(wavefront_slab->wavefronts,wavefront_t*);
@@ -139,6 +164,12 @@ void wavefront_slab_reap(
 }
 void wavefront_slab_clear(
     wavefront_slab_t* const wavefront_slab) {
+  if (wavefront_slab->use_virtual_arena) {
+    mm_virtual_arena_clear(wavefront_slab->arena);
+    wavefront_slab->current_wf_length = wavefront_slab->init_wf_length;
+    wavefront_slab->memory_used = 0;
+    return;
+  }
   // Select slab mode
   switch (wavefront_slab->slab_mode) {
     case wf_slab_reuse:
@@ -167,6 +198,14 @@ void wavefront_slab_clear(
 }
 void wavefront_slab_delete(
     wavefront_slab_t* const wavefront_slab) {
+  if (wavefront_slab->use_virtual_arena) {
+    mm_virtual_arena_delete(wavefront_slab->arena);
+    vector_delete(wavefront_slab->wavefronts_free);
+    vector_delete(wavefront_slab->wavefronts_busy);
+    vector_delete(wavefront_slab->wavefronts);
+    mm_allocator_free(wavefront_slab->mm_allocator,wavefront_slab);
+    return;
+  }
   // Parameters
   mm_allocator_t* const mm_allocator = wavefront_slab->mm_allocator;
   // Delete free vector
@@ -195,6 +234,10 @@ void wavefront_slab_delete(
 void wavefront_slab_set_mode(
     wavefront_slab_t* const wavefront_slab,
     const wf_slab_mode_t slab_mode) {
+  if (wavefront_slab->use_virtual_arena) {
+    wavefront_slab->slab_mode = slab_mode;
+    return;
+  }
   // Check mode
   if (slab_mode != wavefront_slab->slab_mode) {
     // Change mode
@@ -207,7 +250,7 @@ void wavefront_slab_set_mode(
 /*
  * Slab Allocator
  */
-wavefront_t* wavefront_slab_allocate_new(
+static inline wavefront_t* wavefront_slab_allocate_new(
     wavefront_slab_t* const wavefront_slab,
     const int wf_length_requested,
     const int min_lo,
@@ -226,7 +269,8 @@ wavefront_t* wavefront_slab_allocate_new(
   // Return
   return wavefront;
 }
-wavefront_t* wavefront_slab_allocate_free(
+
+static inline wavefront_t* wavefront_slab_allocate_free(
     wavefront_slab_t* const wavefront_slab,
     const int min_lo,
     const int max_hi) {
@@ -246,12 +290,44 @@ wavefront_t* wavefront_slab_allocate(
     wavefront_slab_t* const wavefront_slab,
     const int min_lo,
     const int max_hi) {
-  // Parameters
+  if (wavefront_slab->use_virtual_arena) {
+    const int wf_length = WAVEFRONT_LENGTH(min_lo,max_hi);
+    const int req_length = (wf_length > 0) ? wf_length : 0;
+    const int alloc_length = (req_length > wavefront_slab->init_wf_length) ?
+        req_length : wavefront_slab->init_wf_length;
+    const int wf_elements_allocated = alloc_length + WF_SLAB_SIMD_PADDING;
+
+    // Allocate from virtual arena
+    mm_virtual_arena_t* const arena = wavefront_slab->arena;
+    wavefront_t* const wavefront = (wavefront_t*) mm_virtual_arena_allocate(
+        arena,sizeof(wavefront_t),8);
+
+    wavefront->wf_elements_allocated = wf_elements_allocated;
+    wavefront->offsets_mem = (wf_offset_t*) mm_virtual_arena_allocate(
+        arena,(size_t)wf_elements_allocated*sizeof(wf_offset_t),64);
+
+    if (wavefront_slab->allocate_backtrace) {
+      wavefront->bt_pcigar_mem = (pcigar_t*) mm_virtual_arena_allocate(
+          arena,(size_t)wf_elements_allocated*sizeof(pcigar_t),64);
+      wavefront->bt_prev_mem = (bt_block_idx_t*) mm_virtual_arena_allocate(
+          arena,(size_t)wf_elements_allocated*sizeof(bt_block_idx_t),64);
+    } else {
+      wavefront->bt_pcigar_mem = NULL;
+      wavefront->bt_prev_mem = NULL;
+    }
+
+    wavefront->status = wavefront_status_busy;
+    wavefront_init(wavefront,min_lo,max_hi);
+    wavefront_slab->memory_used += wavefront_get_size(wavefront);
+    return wavefront;
+  }
+
+  // Classic slab allocator (Fallback path)
   vector_t* const wavefronts_free = wavefront_slab->wavefronts_free;
   const int wf_length = WAVEFRONT_LENGTH(min_lo,max_hi);
   // Check slab-mode
   if (wavefront_slab->slab_mode == wf_slab_reuse) {
-    // Check max-length of pre-allocated wavefronts
+    // Check max-length of pre-allocated wavefronts    
     if (wf_length > wavefront_slab->current_wf_length) {
       const int proposed_wf_length = (float)wf_length * WF_SLAB_EXPAND_FACTOR;
       wavefront_slab->current_wf_length = proposed_wf_length; // New slab size
@@ -283,6 +359,10 @@ wavefront_t* wavefront_slab_allocate(
 void wavefront_slab_free(
     wavefront_slab_t* const wavefront_slab,
     wavefront_t* const wavefront) {
+  if (wavefront_slab->use_virtual_arena) {
+    wavefront->status = wavefront_status_free;
+    return;
+  }
   // Check reasons to repurpose wavefront (NOTE: Tight-mode never slab_frees())
   //   (A) Reuse-mode and wavefront has current wf-length
   //   (B) Tight-mode and wavefront has init wf-length
