@@ -34,15 +34,9 @@
 
 #include <stdlib.h>
 
-#if defined(_WIN32) || defined(_WIN64)
-#include <windows.h>
-#elif defined(__APPLE__) || defined(__MACH__)
+#if defined(__linux__) && (defined(__x86_64__) || defined(__aarch64__))
 #include <sys/mman.h>
 #include <unistd.h>
-#else
-#include <sys/mman.h>
-#include <unistd.h>
-#endif
 
 /*
  * Platform Primitives
@@ -55,40 +49,22 @@ static inline uintptr_t mm_virtual_align_address(
 }
 
 static inline uint64_t mm_virtual_page_size(void) {
-#if defined(_WIN32) || defined(_WIN64)
-  SYSTEM_INFO sys_info;
-  GetSystemInfo(&sys_info);
-  return (uint64_t)sys_info.dwPageSize;
-#else
   const long sz = sysconf(_SC_PAGESIZE);
   return (sz > 0) ? (uint64_t)sz : 4096;
-#endif
 }
 
 static inline void* mm_virtual_os_reserve(
     const uint64_t bytes) {
   if (bytes == 0) return NULL;
-#if defined(_WIN32) || defined(_WIN64)
-  return VirtualAlloc(NULL, bytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-#elif defined(__APPLE__) || defined(__MACH__)
-  void* ptr = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
-  return (ptr == MAP_FAILED) ? NULL : ptr;
-#else
   void* ptr = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
   return (ptr == MAP_FAILED) ? NULL : ptr;
-#endif
 }
 
 static inline void mm_virtual_os_release(
     void* const base,
     const uint64_t bytes) {
   if (base == NULL || bytes == 0) return;
-#if defined(_WIN32) || defined(_WIN64)
-  (void)bytes;
-  VirtualFree(base, 0, MEM_RELEASE);
-#else
   munmap(base, bytes);
-#endif
 }
 
 /*
@@ -254,3 +230,55 @@ uint64_t mm_virtual_arena_get_chunk_count(
     const mm_virtual_arena_t* const arena) {
   return (arena != NULL) ? arena->chunk_count : 0;
 }
+
+#else /* !defined(__linux__) || (!defined(__x86_64__) && !defined(__aarch64__)) */
+
+/*
+ * Fallback stubs for unsupported platforms (macOS, Windows, 32-bit).
+ * Ensures libwfa.a links cleanly without undefined symbol errors while
+ * forcing wavefront_slab to use the classic slab allocator.
+ */
+mm_virtual_arena_t* mm_virtual_arena_new(
+    const uint64_t chunk_capacity) {
+  (void)chunk_capacity;
+  return NULL;
+}
+
+void mm_virtual_arena_clear(
+    mm_virtual_arena_t* const arena) {
+  (void)arena;
+}
+
+void mm_virtual_arena_reap(
+    mm_virtual_arena_t* const arena) {
+  (void)arena;
+}
+
+void mm_virtual_arena_delete(
+    mm_virtual_arena_t* const arena) {
+  (void)arena;
+}
+
+void* mm_virtual_arena_allocate(
+    mm_virtual_arena_t* const arena,
+    const uint64_t num_bytes,
+    const uint64_t align_bytes) {
+  (void)arena;
+  (void)num_bytes;
+  (void)align_bytes;
+  return NULL;
+}
+
+uint64_t mm_virtual_arena_get_used(
+    const mm_virtual_arena_t* const arena) {
+  (void)arena;
+  return 0;
+}
+
+uint64_t mm_virtual_arena_get_chunk_count(
+    const mm_virtual_arena_t* const arena) {
+  (void)arena;
+  return 0;
+}
+
+#endif
