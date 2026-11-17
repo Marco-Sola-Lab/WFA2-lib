@@ -623,3 +623,5 @@ Miquel Moretó has contributed with fruitful technical discussions and tireless 
 **Santiago Marco-Sola, Juan Carlos Moure, Miquel Moreto, Antonio Espinosa**. ["Fast gap-affine pairwise alignment using the wavefront algorithm."](https://doi.org/10.1093/bioinformatics/btaa777). Bioinformatics, 2020.
 
 **Santiago Marco-Sola, Jordan M Eizenga, Andrea Guarracino, Benedict Paten, Erik Garrison, Miquel Moreto**. ["Optimal gap-affine alignment in O(s) space"](https://doi.org/10.1093/bioinformatics/btad074). Bioinformatics, 2023.
+
+**Lorien Lopez-Villellas, Cristian Iniguez, Albert Jimenez-Blanco, Quim Aguado-Puig, Miquel Moreto, Jesus Alastruey-Benede, Pablo Ibanez, Santiago Marco-Sola**. ["Singletrack: an algorithm for improving memory consumption and performance of gap-affine sequence alignment"](https://doi.org/10.1093/bioinformatics/btag183). Bioinformatics, 2026.
