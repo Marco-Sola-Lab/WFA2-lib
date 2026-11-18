@@ -188,7 +188,10 @@ void wavefront_unialign_terminate(
       const int offset = wf_aligner->alignment_end_pos.offset;
       cigar->end_v = WAVEFRONT_V(k,offset);
       cigar->end_h = WAVEFRONT_H(k,offset);
-      cigar->score = wavefront_compute_classic_score(wf_aligner,cigar->end_v,cigar->end_h,score);
+      const int alignment_end_score = (wf_aligner->alignment_end_pos.score >= 0) ?
+          wf_aligner->alignment_end_pos.score : score;
+      cigar->score = wavefront_compute_classic_score(
+          wf_aligner,cigar->end_v,cigar->end_h,alignment_end_score);
       align_status->dropped = true;
       align_status->status = WF_STATUS_ALG_PARTIAL;
     }
