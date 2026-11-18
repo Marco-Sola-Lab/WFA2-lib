@@ -694,18 +694,46 @@ cigar_t wavefront_aligner_cigar_endsfree_view(
   }
   return cigar;
 }
+int wavefront_aligner_cigar_skip_gap(
+    cigar_t* const cigar,
+    const char operation,
+    const int max_length) {
+  int length = 0;
+  while (length < max_length && cigar->begin_offset < cigar->end_offset &&
+         cigar->operations[cigar->begin_offset] == operation) {
+    ++(cigar->begin_offset); ++length;
+  }
+  return length;
+}
 bool wavefront_aligner_maxtrim_cigar(
     wavefront_aligner_t* const wf_aligner) {
-  switch (wf_aligner->penalties.distance_metric) {
-    case gap_linear:
-      return cigar_maxtrim_gap_linear(wf_aligner->cigar,&wf_aligner->penalties.linear_penalties);
-    case gap_affine:
-      return cigar_maxtrim_gap_affine(wf_aligner->cigar,&wf_aligner->penalties.affine_penalties);
-    case gap_affine_2p:
-      return cigar_maxtrim_gap_affine2p(wf_aligner->cigar,&wf_aligner->penalties.affine2p_penalties);
-    default:
-      return false; // Maxtrim does not apply to edit/indel distances
+  // Parameters
+  const alignment_form_t* const form = &wf_aligner->alignment_form;
+  const distance_metric_t distance_metric = wf_aligner->penalties.distance_metric;
+  cigar_t* const cigar = wf_aligner->cigar;
+  if (distance_metric <= edit) return false; // Maxtrim does not apply to edit/indel distances
+  // Skip the free leading gap (ends-free): the trimmed part starts at (begin_v,begin_h)
+  int begin_v = 0, begin_h = 0;
+  if (form->span == alignment_endsfree) {
+    begin_h = wavefront_aligner_cigar_skip_gap(cigar,'I',form->text_begin_free);
+    if (begin_h == 0) begin_v = wavefront_aligner_cigar_skip_gap(cigar,'D',form->pattern_begin_free);
   }
+  // Trim
+  bool cigar_trimmed;
+  if (distance_metric == gap_linear) {
+    cigar_trimmed = cigar_maxtrim_gap_linear(cigar,&wf_aligner->penalties.linear_penalties);
+  } else if (distance_metric == gap_affine) {
+    cigar_trimmed = cigar_maxtrim_gap_affine(cigar,&wf_aligner->penalties.affine_penalties);
+  } else {
+    cigar_trimmed = cigar_maxtrim_gap_affine2p(cigar,&wf_aligner->penalties.affine2p_penalties);
+  }
+  // Put the free leading gap back (unless the trim cleared the CIGAR)
+  if (cigar->score != INT32_MIN) {
+    cigar->begin_offset -= begin_v + begin_h;
+    cigar->end_v += begin_v;
+    cigar->end_h += begin_h;
+  }
+  return cigar_trimmed;
 }
 /*
  * Display
