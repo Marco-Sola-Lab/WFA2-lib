@@ -219,7 +219,7 @@ void wavefront_unialign_terminate(
         // Backtrace alignment
         if (wf_aligner->penalties.distance_metric <= gap_linear) {
           wavefront_backtrace_linear(wf_aligner,
-              score,alignment_end_k,alignment_end_offset);
+              alignment_end_score,alignment_end_k,alignment_end_offset);
         } else if (wf_aligner->singletrack) {
           wavefront_backtrace_affine_singletrack(wf_aligner,
               wf_aligner->component_begin,wf_aligner->component_end,
