@@ -664,6 +664,36 @@ uint64_t wavefront_aligner_get_size(
     return sub_aligners + bt_buffer_size + slab_size;
   }
 }
+
+/**
+ * View of the aligner's CIGAR without the leading and trailing gaps that are
+ * free under the ends-free configuration. The view shares the operations
+ * buffer with the aligner's CIGAR; only its begin/end offsets differ. If a
+ * leading gap is longer than its free limit, only the first (limit) operations
+ * are free; the rest stay in the view and are scored as a gap. The CIGAR end
+ * position (end_v, end_h) must be set before calling this function.
+ *
+ * @param wf_aligner The wavefront aligner (with a computed CIGAR).
+ * @return The CIGAR view (a copy of the aligner's CIGAR if not ends-free).
+ */
+cigar_t wavefront_aligner_cigar_endsfree_view(
+    wavefront_aligner_t* const wf_aligner) {
+  // Parameters
+  const alignment_form_t* const form = &wf_aligner->alignment_form;
+  // Same operations, without the free leading/trailing gaps (ends-free)
+  cigar_t cigar = *(wf_aligner->cigar);
+  if (form->span != alignment_endsfree) return cigar;
+  cigar.end_offset -=
+      (wf_aligner->sequences.pattern_length - cigar.end_v) +
+      (wf_aligner->sequences.text_length - cigar.end_h);
+  const char op = cigar.operations[cigar.begin_offset];
+  int free_ops = (op=='I') ? form->text_begin_free : (op=='D') ? form->pattern_begin_free : 0;
+  while (free_ops-- > 0 && cigar.begin_offset < cigar.end_offset &&
+         cigar.operations[cigar.begin_offset] == op) {
+    ++(cigar.begin_offset);
+  }
+  return cigar;
+}
 bool wavefront_aligner_maxtrim_cigar(
     wavefront_aligner_t* const wf_aligner) {
   switch (wf_aligner->penalties.distance_metric) {

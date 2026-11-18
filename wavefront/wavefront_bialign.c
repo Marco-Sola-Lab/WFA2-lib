@@ -1252,7 +1252,20 @@ int wavefront_bialign_alignment(
   // Set score (Strictly speaking, only needed at level-0)
   if (align_level == 0) {
     cigar_t* const cigar = wf_aligner->cigar;
-    cigar->score = wavefront_compute_classic_score(wf_aligner,pattern_length,text_length,breakpoint.score);
+    const distance_metric_t distance_metric = wf_aligner->penalties.distance_metric;
+
+    // With heuristics, there are cases where the CIGAR score
+    // can difer from the aligner's (e.g., when a gap is closed and reopened).
+    // We need to recompute the score from the CIGAR.
+    if (wf_aligner->heuristic.strategy != wf_heuristic_none &&
+        (distance_metric == gap_affine || distance_metric == gap_affine_2p) &&
+        cigar->begin_offset < cigar->end_offset) {
+      cigar->score = (distance_metric == gap_affine) ?
+          cigar_score_gap_affine(cigar,&wf_aligner->penalties.affine_penalties) :
+          cigar_score_gap_affine2p(cigar,&wf_aligner->penalties.affine2p_penalties);
+    } else {
+      cigar->score = wavefront_compute_classic_score(wf_aligner,pattern_length,text_length,breakpoint.score);
+    }
     cigar->end_v = pattern_length;
     cigar->end_h = text_length;
   }

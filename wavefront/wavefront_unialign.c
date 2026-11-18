@@ -256,7 +256,24 @@ void wavefront_unialign_terminate(
       const int offset = wf_aligner->alignment_end_pos.offset;
       cigar->end_v = WAVEFRONT_V(k,offset);
       cigar->end_h = WAVEFRONT_H(k,offset);
-      cigar->score = wavefront_compute_classic_score(wf_aligner,cigar->end_v,cigar->end_h,score);
+      const distance_metric_t distance_metric = wf_aligner->penalties.distance_metric;
+
+      // With heuristics, there are cases where the CIGAR score
+      // can difer from the aligner's (e.g., when a gap is closed and reopened).
+      // We need to recompute the score from the CIGAR. In these cases, the CIGAR score must be recomputed.
+      if (wf_aligner->heuristic.strategy != wf_heuristic_none &&
+          (distance_metric == gap_affine || distance_metric == gap_affine_2p)) {
+        cigar_t cigar_view = wavefront_aligner_cigar_endsfree_view(wf_aligner);
+        if (cigar_view.begin_offset >= cigar_view.end_offset) {
+          cigar->score = 0;
+        } else if (distance_metric == gap_affine) {
+          cigar->score = cigar_score_gap_affine(&cigar_view,&wf_aligner->penalties.affine_penalties);
+        } else {
+          cigar->score = cigar_score_gap_affine2p(&cigar_view,&wf_aligner->penalties.affine2p_penalties);
+        }
+      } else {
+        cigar->score = wavefront_compute_classic_score(wf_aligner,cigar->end_v,cigar->end_h,score);
+      }
       // Set status
       if (unreachable) {
         align_status->status = WF_STATUS_ALG_PARTIAL;
