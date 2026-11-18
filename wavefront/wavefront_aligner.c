@@ -244,6 +244,7 @@ void wavefront_aligner_init_alignment(
   wavefront_aligner_init_penalties(wf_aligner,attributes);
   // Memory mode
   wf_aligner->memory_mode = attributes->memory_mode;
+  wf_aligner->singletrack = false;
   wavefront_aligner_init_heuristic(wf_aligner,attributes);
 }
 /*

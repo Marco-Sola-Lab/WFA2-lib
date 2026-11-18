@@ -100,6 +100,7 @@ typedef struct _wavefront_aligner_t {
   wavefront_penalties_t penalties;            // Alignment penalties
   wavefront_heuristic_t heuristic;            // Heuristic's parameters
   wavefront_memory_t memory_mode;             // Wavefront memory strategy (modular wavefronts and piggyback)
+  bool singletrack;                           // Singletrack backtrace (M-wavefronts only)
   // Wavefront components
   wavefront_components_t wf_components;       // Wavefront components
   affine2p_matrix_type component_begin;       // Alignment begin component

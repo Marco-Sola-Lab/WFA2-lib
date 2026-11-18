@@ -49,6 +49,13 @@ void wavefront_backtrace_affine(
     const int alignment_score,
     const int alignment_k,
     const wf_offset_t alignment_offset);
+void wavefront_backtrace_affine_singletrack(
+    wavefront_aligner_t* const wf_aligner,
+    const affine2p_matrix_type component_begin,
+    const affine2p_matrix_type component_end,
+    const int alignment_score,
+    const int alignment_k,
+    const wf_offset_t alignment_offset);
 
 /*
  * Backtrace from BT-Buffer (pcigar)
