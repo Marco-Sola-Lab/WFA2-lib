@@ -78,6 +78,10 @@ void wavefront_align_presets__checks(
       fprintf(stderr,"[WFA] BiWFA extension is not implemented yet (let me know and I'll add it)\n");
       exit(1);
     }
+    if (wf_aligner->heuristic.strategy & (wf_heuristic_xdrop | wf_heuristic_zdrop)) {
+      fprintf(stderr,"[WFA] BiWFA is not compatible with X-drop/Z-drop heuristics\n");
+      exit(1);
+    }
   }
   const distance_metric_t distance_metric = wf_aligner->penalties.distance_metric;
   const bool is_heuristic_drop =
