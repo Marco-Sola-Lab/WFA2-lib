@@ -1254,15 +1254,19 @@ int wavefront_bialign_alignment(
     cigar_t* const cigar = wf_aligner->cigar;
     const distance_metric_t distance_metric = wf_aligner->penalties.distance_metric;
 
-    // With heuristics, there are cases where the CIGAR score
-    // can difer from the aligner's (e.g., when a gap is closed and reopened).
-    // We need to recompute the score from the CIGAR.
+    // With heuristics, the halves are re-aligned independently, so the
+    // CIGAR score can differ from the breakpoint score. Recompute it from the CIGAR.
     if (wf_aligner->heuristic.strategy != wf_heuristic_none &&
-        (distance_metric == gap_affine || distance_metric == gap_affine_2p) &&
         cigar->begin_offset < cigar->end_offset) {
-      cigar->score = (distance_metric == gap_affine) ?
-          cigar_score_gap_affine(cigar,&wf_aligner->penalties.affine_penalties) :
-          cigar_score_gap_affine2p(cigar,&wf_aligner->penalties.affine2p_penalties);
+      if (distance_metric <= edit) {
+        cigar->score = cigar_score_edit(cigar);
+      } else if (distance_metric == gap_linear) {
+        cigar->score = cigar_score_gap_linear(cigar,&wf_aligner->penalties.linear_penalties);
+      } else if (distance_metric == gap_affine) {
+        cigar->score = cigar_score_gap_affine(cigar,&wf_aligner->penalties.affine_penalties);
+      } else {
+        cigar->score = cigar_score_gap_affine2p(cigar,&wf_aligner->penalties.affine2p_penalties);
+      }
     } else {
       cigar->score = wavefront_compute_classic_score(wf_aligner,pattern_length,text_length,breakpoint.score);
     }
