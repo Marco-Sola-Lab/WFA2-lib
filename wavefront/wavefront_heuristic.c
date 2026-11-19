@@ -428,9 +428,13 @@ bool wavefront_heuristic_zdrop(
       wf_heuristic->max_wf_score = score;
       wf_heuristic->max_sw_score_k = cmax_k;
       wf_heuristic->max_sw_score_offset = cmax_offset;
+      wf_heuristic->zdrop_last_score = score;
+    } else if (max_sw_score - (int)cmax_sw_score <= zdrop) {
+      wf_heuristic->zdrop_last_score = score;
     } else {
-      // Test Z-drop
-      if (max_sw_score - (int)cmax_sw_score > zdrop) {
+      // Z-drop only if it lasts longer than any single penalty (the best path may be in-between wavefronts)
+      const int max_penalty = wf_aligner->wf_components.max_score_scope - 1;
+      if (score - wf_heuristic->zdrop_last_score >= max_penalty) {
         wf_aligner->alignment_end_pos.score = wf_heuristic->max_wf_score;
         wf_aligner->alignment_end_pos.k = max_k;
         wf_aligner->alignment_end_pos.offset = max_offset;
@@ -443,6 +447,7 @@ bool wavefront_heuristic_zdrop(
     wf_heuristic->max_wf_score = score;
     wf_heuristic->max_sw_score_k = cmax_k;
     wf_heuristic->max_sw_score_offset = cmax_offset;
+    wf_heuristic->zdrop_last_score = score;
   }
   // Set wait steps (don't repeat this heuristic often)
   wf_heuristic->steps_wait = wf_heuristic->steps_between_cutoffs;

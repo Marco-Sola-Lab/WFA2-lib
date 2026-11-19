@@ -66,6 +66,7 @@ typedef struct {
   int max_wf_score;                   // Corresponding wf-score (to max_sw_score)
   int max_sw_score_offset;            // Offset of the maximum score observed
   int max_sw_score_k;                 // Diagonal of the maximum score observed
+  int zdrop_last_score;               // Last wf-score without a Z-drop
 } wavefront_heuristic_t;
 
 /*
