@@ -1150,6 +1150,25 @@ int wavefront_bialign_find_breakpoint_exception(
 /*
  * Bidirectional Alignment
  */
+int wavefront_bialign_cigar_score(
+    wavefront_aligner_t* const wf_aligner) {
+  // Parameters
+  cigar_t* const cigar = wf_aligner->cigar;
+  const distance_metric_t distance_metric = wf_aligner->penalties.distance_metric;
+  // Score the CIGAR
+  if (cigar->begin_offset >= cigar->end_offset) return 0;
+  switch (distance_metric) {
+    case indel:
+    case edit:
+      return cigar_score_edit(cigar);
+    case gap_linear:
+      return cigar_score_gap_linear(cigar,&wf_aligner->penalties.linear_penalties);
+    case gap_affine:
+      return cigar_score_gap_affine(cigar,&wf_aligner->penalties.affine_penalties);
+    default:
+      return cigar_score_gap_affine2p(cigar,&wf_aligner->penalties.affine2p_penalties);
+  }
+}
 void wavefront_bialign_init_half_0(
     alignment_form_t* const global_form,
     alignment_form_t* const half_form) {
@@ -1196,11 +1215,18 @@ int wavefront_bialign_alignment(
   const int pattern_length = pattern_end - pattern_begin;
   const int text_length = text_end - text_begin;
   // Trivial cases
-  if (text_length == 0) {
-    cigar_append_deletion(wf_aligner->cigar,pattern_length);
-    return WF_STATUS_OK;
-  } else if (pattern_length == 0) {
-    cigar_append_insertion(wf_aligner->cigar,text_length);
+  if (text_length == 0 || pattern_length == 0) {
+    cigar_t* const cigar = wf_aligner->cigar;
+    if (text_length == 0) {
+      cigar_append_deletion(cigar,pattern_length);
+    } else {
+      cigar_append_insertion(cigar,text_length);
+    }
+    if (align_level == 0) {
+      cigar->score = wavefront_bialign_cigar_score(wf_aligner);
+      cigar->end_v = pattern_length;
+      cigar->end_h = text_length;
+    }
     return WF_STATUS_OK;
   } else if (score_remaining <= WF_BIALIGN_FALLBACK_MIN_SCORE) {
     // Fall back to regular WFA
@@ -1252,21 +1278,10 @@ int wavefront_bialign_alignment(
   // Set score (Strictly speaking, only needed at level-0)
   if (align_level == 0) {
     cigar_t* const cigar = wf_aligner->cigar;
-    const distance_metric_t distance_metric = wf_aligner->penalties.distance_metric;
-
     // With heuristics, the halves are re-aligned independently, so the
     // CIGAR score can differ from the breakpoint score. Recompute it from the CIGAR.
-    if (wf_aligner->heuristic.strategy != wf_heuristic_none &&
-        cigar->begin_offset < cigar->end_offset) {
-      if (distance_metric <= edit) {
-        cigar->score = cigar_score_edit(cigar);
-      } else if (distance_metric == gap_linear) {
-        cigar->score = cigar_score_gap_linear(cigar,&wf_aligner->penalties.linear_penalties);
-      } else if (distance_metric == gap_affine) {
-        cigar->score = cigar_score_gap_affine(cigar,&wf_aligner->penalties.affine_penalties);
-      } else {
-        cigar->score = cigar_score_gap_affine2p(cigar,&wf_aligner->penalties.affine2p_penalties);
-      }
+    if (wf_aligner->heuristic.strategy != wf_heuristic_none) {
+      cigar->score = wavefront_bialign_cigar_score(wf_aligner);
     } else {
       cigar->score = wavefront_compute_classic_score(wf_aligner,pattern_length,text_length,breakpoint.score);
     }
