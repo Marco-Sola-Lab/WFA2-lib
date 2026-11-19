@@ -76,6 +76,7 @@ wavefront_aligner_attr_t wavefront_aligner_attr_default = {
     },
     // Memory model
     .memory_mode = wavefront_memory_high,
+    .use_virtual_arena = true, // Enabled by default on supported platforms (Linux 64-bit)
     // MM
     .mm_allocator = NULL, // Use private MM
     // Display

@@ -124,6 +124,7 @@ typedef struct {
   wavefront_heuristic_t heuristic;         // Wavefront heuristic
   // Memory model
   wavefront_memory_t memory_mode;          // Wavefront memory strategy (modular wavefronts and piggyback)
+  bool use_virtual_arena;                  // Programmatic control: enable demand-paged virtual arena on 64-bit Linux
   // External MM (instead of allocating one inside)
   mm_allocator_t* mm_allocator;            // MM-Allocator
   // Display

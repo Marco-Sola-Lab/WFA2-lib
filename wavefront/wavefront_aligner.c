@@ -128,7 +128,8 @@ wavefront_aligner_t* wavefront_aligner_init_mm(
     mm_allocator_t* mm_allocator,
     const bool memory_modular,
     const bool bt_piggyback,
-    const bool bi_alignment) {
+    const bool bi_alignment,
+    const bool use_virtual_arena) {
   // MM
   bool mm_allocator_own;
   if (mm_allocator == NULL) {
@@ -148,7 +149,7 @@ wavefront_aligner_t* wavefront_aligner_init_mm(
     wf_aligner->wavefront_slab = NULL;
   } else {
     const wf_slab_mode_t slab_mode = (memory_modular) ? wf_slab_reuse : wf_slab_tight;
-    wf_aligner->wavefront_slab = wavefront_slab_new(1000,bt_piggyback,slab_mode,wf_aligner->mm_allocator);
+    wf_aligner->wavefront_slab = wavefront_slab_new(1000,bt_piggyback,slab_mode,use_virtual_arena,wf_aligner->mm_allocator);
   }
   // Return
   return wf_aligner;
@@ -435,7 +436,7 @@ wavefront_aligner_t* wavefront_aligner_new(
   const bool bi_alignment = (attributes->memory_mode == wavefront_memory_ultralow);
   // Handler
   wavefront_aligner_t* const wf_aligner = wavefront_aligner_init_mm(
-      attributes->mm_allocator,memory_modular,bt_piggyback,bi_alignment);
+      attributes->mm_allocator,memory_modular,bt_piggyback,bi_alignment,attributes->use_virtual_arena);
   // Plot
   if (attributes->plot.enabled) {
     wf_aligner->plot = wavefront_plot_new(attributes->distance_metric,
