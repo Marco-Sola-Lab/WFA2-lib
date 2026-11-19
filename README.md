@@ -492,7 +492,7 @@ This limit can be combined with the heuristics below; set `attributes.heuristic.
 </table>
 </p>
 
-- <a name="wfa2.drops"></a> **Heuristic drops.** This heuristic compares the maximum score computed so far with the score of the last computed cells. Depending on the score difference, these heuristic strategies can reduce the size of the wavefront computed or even abandon the alignment process. In the case of zero-match alignment, $M=1$ will be assumed just for computation of the score drop. Also note that this heuristic is not compatible with distances 'edit' or 'indel'. In this category, WFA2 implements 'X-drop' and 'Z-drop'.
+- <a name="wfa2.drops"></a> **Heuristic drops.** This heuristic compares the maximum score computed so far with the score of the last computed cells. Depending on the score difference, these heuristic strategies can reduce the size of the wavefront computed or even abandon the alignment process. In the case of zero-match alignment, $M=1$ will be assumed just for computation of the score drop. Also note that this heuristic is not compatible with distances 'edit' or 'indel', nor with BiWFA (memory mode 'ultralow'). In this category, WFA2 implements 'X-drop' and 'Z-drop'.
 
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**X-drop** implements the classical X-drop heuristic. For each diagonal $k$, the X-drop heuristic compares the current score $sw_k$ with the maximum observed score so far $sw_{max}$. If the difference drops more than the $xdrop$ parameter (i.e., $sw_{max} - sw_k > xdrop$), the heuristic prunes the diagonal $k$ as it is unlikely to lead to the optimum alignment. If all the diagonals are pruned under this criteria, the alignment process is abandoned.
 
@@ -503,7 +503,7 @@ This limit can be combined with the heuristics below; set `attributes.heuristic.
   attributes.heuristic.steps_between_cutoffs = 100;
 ```
 
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**Z-drop** implements the Z-drop heuristic (as described in Minimap2). This heuristic halts the alignment process if the score drops too fast in the diagonal direction. Let $sw_{max}$ be the maximum observed score so far, computed at cell $(i',j')$. Then, let $sw$ be the maximum score found in the last computed wavefront, computed at cell $(i,j)$. The Z-drop heuristic stops the alignment process if $sw_{max} - sw > zdrop + gap_e·|(i-i')-(j-j')|$, being $gap_e$ the gap-extension penalty and $zdrop$ a parameter of the heuristic.
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**Z-drop** implements a Z-drop heuristic based on the one in Minimap2. This heuristic halts the alignment process if the score drops too fast. Let $sw_{max}$ be the maximum observed score so far, and let $sw$ be the maximum score found in the last computed wavefront. The Z-drop heuristic stops the alignment process if $sw_{max} - sw > zdrop$ (being $zdrop$ a parameter of the heuristic) for longer than the largest single penalty (a mismatch, or a gap opening plus extension). This avoids stopping while the best alignment is paying a mismatch or a gap and has no cell in the last computed wavefront. When the alignment stops, it is reported as a partial alignment ending at the cell of $sw_{max}$.
 
 
 ```C

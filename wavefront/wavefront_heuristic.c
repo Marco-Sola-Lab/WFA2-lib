@@ -305,7 +305,12 @@ void wf_heuristic_compute_sw_scores(
     wf_offset_t* const max_offset) {
   // Parameters
   const int wf_match = wf_aligner->penalties.match;
-  const int swg_match = (wf_match!=0) ? -(wf_aligner->penalties.match) : -1;
+  const int swg_match = (wf_match!=0) ? -(wf_aligner->penalties.match) : 1;
+  // Free leading gaps (ends-free, only seeded when match=0) score nothing (estimated from the diagonal)
+  const alignment_form_t* const form = &wf_aligner->alignment_form;
+  const bool begin_free = (wf_match==0 && form->span==alignment_endsfree);
+  const int pattern_begin_free = (begin_free) ? form->pattern_begin_free : 0;
+  const int text_begin_free = (begin_free) ? form->text_begin_free : 0;
   // Compute min-distance
   const wf_offset_t* const offsets = wavefront->offsets;
   int k, cmax_sw_score = INT_MIN, cmax_k = 0, cmax_offset = 0;
@@ -313,8 +318,10 @@ void wf_heuristic_compute_sw_scores(
   for (k=wavefront->lo;k<=wavefront->hi;++k) {
     const wf_offset_t offset = offsets[k];
     if (offset < 0) continue;
-    const int v = WAVEFRONT_V(k,offset);
-    const int h = WAVEFRONT_H(k,offset);
+    const int free_v = (k < 0) ? MIN(-k,pattern_begin_free) : 0;
+    const int free_h = (k > 0) ? MIN(k,text_begin_free) : 0;
+    const int v = WAVEFRONT_V(k,offset) - free_v;
+    const int h = WAVEFRONT_H(k,offset) - free_h;
     const int sw_score = WF_SCORE_TO_SW_SCORE(swg_match,v,h,wf_score);
     sw_scores[k] = sw_score;
     if (cmax_sw_score < sw_score) {
@@ -428,9 +435,13 @@ bool wavefront_heuristic_zdrop(
       wf_heuristic->max_wf_score = score;
       wf_heuristic->max_sw_score_k = cmax_k;
       wf_heuristic->max_sw_score_offset = cmax_offset;
+      wf_heuristic->zdrop_last_score = score;
+    } else if (max_sw_score - (int)cmax_sw_score <= zdrop) {
+      wf_heuristic->zdrop_last_score = score;
     } else {
-      // Test Z-drop
-      if (max_sw_score - (int)cmax_sw_score > zdrop) {
+      // Z-drop only if it lasts longer than any single penalty (the best path may be in-between wavefronts)
+      const int max_penalty = wf_aligner->wf_components.max_score_scope - 1;
+      if (score - wf_heuristic->zdrop_last_score >= max_penalty) {
         wf_aligner->alignment_end_pos.score = wf_heuristic->max_wf_score;
         wf_aligner->alignment_end_pos.k = max_k;
         wf_aligner->alignment_end_pos.offset = max_offset;
@@ -443,6 +454,7 @@ bool wavefront_heuristic_zdrop(
     wf_heuristic->max_wf_score = score;
     wf_heuristic->max_sw_score_k = cmax_k;
     wf_heuristic->max_sw_score_offset = cmax_offset;
+    wf_heuristic->zdrop_last_score = score;
   }
   // Set wait steps (don't repeat this heuristic often)
   wf_heuristic->steps_wait = wf_heuristic->steps_between_cutoffs;
