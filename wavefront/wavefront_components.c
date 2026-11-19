@@ -46,6 +46,7 @@
  */
 void wavefront_components_dimensions_edit(
     wavefront_components_t* const wf_components,
+    wavefront_penalties_t* const penalties,
     const int max_pattern_length,
     const int max_text_length,
     int* const max_score_scope,
@@ -55,6 +56,8 @@ void wavefront_components_dimensions_edit(
   // Dimensions
   if (wf_components->memory_modular) {
     *num_wavefronts = 2;
+  } else if (penalties->distance_metric == indel) {
+    *num_wavefronts = max_pattern_length + max_text_length + 1; // No mismatches (X = I + D)
   } else {
     *num_wavefronts = MAX(max_pattern_length,max_text_length) + 1;
   }
@@ -134,7 +137,7 @@ void wavefront_components_dimensions(
     case indel:
     case edit:
       wavefront_components_dimensions_edit(
-          wf_components,
+          wf_components,penalties,
           max_pattern_length,max_text_length,
           max_score_scope,num_wavefronts);
       break;
